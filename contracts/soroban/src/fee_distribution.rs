@@ -376,11 +376,11 @@ impl FeeDistributionContract {
             panic!("amount must be positive");
         }
 
-        // Verify authorisation.
         let admin: Address = env.storage().instance().get(&FeeDistDataKey::Admin).unwrap();
+        let collectors: Vec<Address> = env
+            .storage().instance().get(&FeeDistDataKey::Collectors).unwrap();
+
         if admin != collector {
-            let collectors: Vec<Address> = env
-                .storage().instance().get(&FeeDistDataKey::Collectors).unwrap();
             let mut authorised = false;
             for c in collectors.iter() {
                 if c == collector {
@@ -1073,6 +1073,8 @@ impl FeeDistributionContract {
             .storage().instance().get(&FeeDistDataKey::Treasury).unwrap();
         let contract_addr = env.current_contract_address();
         let threshold = Self::min_disbursement(env);
+        let mut distribution_count: u32 = env
+            .storage().instance().get(&FeeDistDataKey::DistributionCount).unwrap();
 
         for token in tokens.iter() {
             let mut pool: FeePool = match env
@@ -1135,11 +1137,6 @@ impl FeeDistributionContract {
             pool.last_distribution_time = env.ledger().timestamp();
             env.storage().persistent().set(&FeeDistDataKey::FeePool(token.clone()), &pool);
 
-            // Write immutable history record.
-            let mut count: u32 = env
-                .storage().instance()
-                .get(&FeeDistDataKey::DistributionCount)
-                .unwrap();
             let record = DistributionRecord {
                 token: token.clone(),
                 total_amount: pending,
@@ -1147,13 +1144,13 @@ impl FeeDistributionContract {
                 governance_amount: governance_amt,
                 treasury_amount: treasury_amt,
                 timestamp: env.ledger().timestamp(),
-                distribution_id: count,
+                distribution_id: distribution_count,
             };
-            env.storage().persistent().set(&FeeDistDataKey::Distribution(count), &record);
-            count = count.checked_add(1).expect("overflow");
-            env.storage().instance().set(&FeeDistDataKey::DistributionCount, &count);
+            env.storage().persistent().set(&FeeDistDataKey::Distribution(distribution_count), &record);
+            distribution_count = distribution_count.checked_add(1).expect("overflow");
         }
 
+        env.storage().instance().set(&FeeDistDataKey::DistributionCount, &distribution_count);
         env.storage().instance().set(
             &FeeDistDataKey::LastAutoDistribution,
             &env.ledger().timestamp(),

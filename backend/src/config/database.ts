@@ -69,21 +69,25 @@ export const databaseConfig: Knex.Config = {
     database: config.POSTGRES_DB,
     user: config.POSTGRES_USER,
     password: config.POSTGRES_PASSWORD,
-    // Keep connections alive
     keepAlive: true,
   },
   pool: {
     min: 2,
     max: 20,
-    // Reclaim idle connections after 15s
     idleTimeoutMillis: DB_POOL_IDLE_TIMEOUT_MS,
-    // Fail if a connection cannot be acquired within 30s (pool exhaustion)
     acquireTimeoutMillis: DB_POOL_ACQUIRE_TIMEOUT_MS,
-    // Bound backend connection establishment to 10s
     createTimeoutMillis: DB_POOL_CREATE_TIMEOUT_MS,
-    // Validate connection before use
     afterCreate(conn: { query: (sql: string, cb: (err: Error | null) => void) => void }, done: (err: Error | null, conn: unknown) => void) {
       conn.query("SET timezone='UTC'", (err) => done(err, conn));
+    },
+  },
+  log: {
+    debug: (bindings: unknown[]) => {
+      const numAvailable = (global as any).__knexPoolSize?.available ?? "?";
+      const numUsed = (global as any).__knexPoolSize?.used ?? "?";
+      if (numAvailable < 3) {
+        logger.warn({ available: numAvailable, used: numUsed }, "Low pool availability");
+      }
     },
   },
   migrations: {

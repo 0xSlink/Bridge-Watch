@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAssetsWithHealth } from "../hooks/useAssets";
 import { useBridges } from "../hooks/useBridges";
@@ -188,6 +188,7 @@ export default function Dashboard() {
   const [exportPickerOpen, setExportPickerOpen] = useState(false);
   const [sharingOpen, setSharingOpen] = useState(false);
   const [inspectedMetricId, setInspectedMetricId] = useState<string | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
   const insightsTrayOpen = useUIStore((s) => s.insightsTrayOpen);
   const insightsTraySymbol = useUIStore((s) => s.selectedAsset);
   const closeInsightsTray = useUIStore((s) => s.closeInsightsTray);
@@ -233,6 +234,30 @@ export default function Dashboard() {
       await Promise.all([refetchAssets(), refetchBridges()]);
     },
   });
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!gridRef.current) return;
+      const widgets = Array.from(
+        gridRef.current.querySelectorAll("[data-widget-id]")
+      ) as HTMLElement[];
+      if (widgets.length === 0) return;
+
+      const focused = document.activeElement as HTMLElement;
+      const focusedIndex = widgets.indexOf(focused);
+
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        widgets[(focusedIndex + 1) % widgets.length]?.focus();
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        widgets[(focusedIndex - 1 + widgets.length) % widgets.length]?.focus();
+      }
+    };
+
+    gridRef.current?.addEventListener("keydown", handleKeyDown);
+    return () => gridRef.current?.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const availableAssets = useMemo(() => {
     if (!assetsWithHealth) return [];
@@ -640,7 +665,7 @@ export default function Dashboard() {
       </div>
 
       {/* Overview Stats */}
-      <div data-tour="kpis">
+      <div data-tour="kpis" data-widget-id="kpi-banner" tabIndex={0} className="focus:ring-2 focus:ring-stellar-blue outline-none">
         <KpiBanner
           items={kpiItems}
           loading={assetsLoading || bridgesLoading}
@@ -708,12 +733,12 @@ export default function Dashboard() {
       {showAssets ? <ComparativeSparklineGrid items={sparklineItems} /> : null}
 
       {showAssets ? (
-        <section>
+        <section ref={gridRef}>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-semibold text-white">Asset Health</h2>
           </div>
           {showFilteredAssetEmpty ? (
-            <div className="rounded-lg border border-stellar-border bg-stellar-card p-8 text-center">
+            <div data-widget-id="asset-empty" tabIndex={0} className="rounded-lg border border-stellar-border bg-stellar-card p-8 text-center focus:ring-2 focus:ring-stellar-blue outline-none">
               <p className="text-stellar-text-secondary">No assets match the selected filters.</p>
               <button
                 type="button"
@@ -724,7 +749,9 @@ export default function Dashboard() {
               </button>
             </div>
           ) : (
-            <AssetDiscoverySection assets={filteredAssets} isLoading={assetsLoading} />
+            <div data-widget-id="asset-discovery" tabIndex={0} className="focus:ring-2 focus:ring-stellar-blue outline-none">
+              <AssetDiscoverySection assets={filteredAssets} isLoading={assetsLoading} />
+            </div>
           )}
         </section>
       ) : null}
