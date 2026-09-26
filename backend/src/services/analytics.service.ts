@@ -3,6 +3,7 @@ import { logger } from "../utils/logger.js";
 import { CacheService, CacheTTL } from "../utils/cache.js";
 
 const knex = getDatabase();
+const QUERY_TIMEOUT_MS = 30_000;
 
 export type TimeInterval = "1h" | "1d" | "1w" | "1M";
 export type AggregationPeriod = "hourly" | "daily" | "weekly" | "monthly";
@@ -89,13 +90,12 @@ export class AnalyticsService {
         logger.info("Computing protocol-wide statistics");
 
         const [tvlResult, volumeResult, bridgeResult, assetResult, txResult, healthResult] = await Promise.all([
-          // Total Value Locked
           knex("bridges")
             .sum("total_value_locked as total")
             .where("is_active", true)
-            .first(),
-          
-          // Volume aggregations
+            .first()
+            .timeout(QUERY_TIMEOUT_MS),
+
           knex("bridge_volume_stats")
             .select(
               knex.raw("SUM(inflow_amount + outflow_amount) as volume_24h"),
@@ -103,31 +103,32 @@ export class AnalyticsService {
               knex.raw("SUM(CASE WHEN stat_date >= CURRENT_DATE - INTERVAL '30 days' THEN inflow_amount + outflow_amount ELSE 0 END) as volume_30d")
             )
             .where("stat_date", ">=", knex.raw("CURRENT_DATE - INTERVAL '30 days'"))
-            .first(),
-          
-          // Active bridges
+            .first()
+            .timeout(QUERY_TIMEOUT_MS),
+
           knex("bridges")
             .count("* as count")
             .where("is_active", true)
-            .first(),
-          
-          // Active assets
+            .first()
+            .timeout(QUERY_TIMEOUT_MS),
+
           knex("assets")
             .count("* as count")
             .where("is_active", true)
-            .first(),
-          
-          // Transaction count (24h)
+            .first()
+            .timeout(QUERY_TIMEOUT_MS),
+
           knex("bridge_volume_stats")
             .sum("tx_count as total")
             .where("stat_date", ">=", knex.raw("CURRENT_DATE - INTERVAL '1 day'"))
-            .first(),
-          
-          // Average health score
+            .first()
+            .timeout(QUERY_TIMEOUT_MS),
+
           knex("health_scores")
             .avg("overall_score as avg")
             .where("time", ">=", knex.raw("NOW() - INTERVAL '1 hour'"))
-            .first(),
+            .first()
+            .timeout(QUERY_TIMEOUT_MS),
         ] as any);
 
         const stats: ProtocolStats = {
@@ -160,7 +161,8 @@ export class AnalyticsService {
 
         const bridges = await knex("bridges")
           .select("*")
-          .where("is_active", true);
+          .where("is_active", true)
+          .timeout(QUERY_TIMEOUT_MS);
 
         const totalTVL = bridges.reduce((sum: number, b: any) => sum + parseFloat(b.total_value_locked), 0);
 
@@ -177,15 +179,17 @@ export class AnalyticsService {
                 )
                 .where("bridge_name", bridge.name)
                 .where("stat_date", ">=", knex.raw("CURRENT_DATE - INTERVAL '30 days'"))
-                .first(),
-              
+                .first()
+                .timeout(QUERY_TIMEOUT_MS),
+
               knex("bridge_volume_stats")
                 .sum("inflow_amount as total")
                 .sum("outflow_amount as total_out")
                 .where("bridge_name", bridge.name)
                 .where("stat_date", ">=", knex.raw("CURRENT_DATE - INTERVAL '2 days'"))
                 .where("stat_date", "<", knex.raw("CURRENT_DATE - INTERVAL '1 day'"))
-                .first(),
+                .first()
+                .timeout(QUERY_TIMEOUT_MS),
             ] as any);
 
             const currentVolume = parseFloat(volumeStats?.volume_24h || "0");
